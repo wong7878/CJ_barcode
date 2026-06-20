@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#D4AF37">
+  <title>Crown Jewels 金冠 – Barcode Scanner</title>
+  
+  <!-- SheetJS for reading Excel files -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #FFF9E6; --card: #FFFFFF; --gold: #D4AF37; --gold-dark: #B8860B;
+      --gray: #6C757D; --text: #2C2C2C; --light: #666666;
+      --radius: 12px; --shadow: 0 6px 18px rgba(212, 175, 55, 0.15);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, var(--bg) 0%, #FFE8B5 100%);
+      min-height: 100vh; display: flex; justify-content: center; align-items: flex-start;
+      padding: 12px; color: var(--text);
+    }
+    .app {
+      background: var(--card); width: 100%; max-width: 420px;
+      border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px;
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 12px; border-bottom: 2px solid var(--gold); padding-bottom: 8px;
+    }
+    .title-stack { display: flex; flex-direction: column; line-height: 1.05; }
+    .title-en { font-size: 1.7rem; font-weight: 800; color: var(--gold-dark); }
+    .title-zh { font-size: 1.4rem; font-weight: 700; color: var(--gold); margin-top: 1px; }
+    #langSelect {
+      padding: 2px 4px; border: 1px solid var(--gold); border-radius: 4px;
+      background: #fff; font-size: 0.75rem; font-weight: 600; color: var(--gold-dark);
+      cursor: pointer; width: 58px; text-align: center; height: 24px;
+    }
+
+    .excel-section {
+      background: #F0F8FF; border: 2px dashed #4A90E2; border-radius: 10px; 
+      padding: 10px; margin-bottom: 14px; text-align: center;
+    }
+    .excel-section label { font-weight: 700; font-size: 0.85rem; color: #004085; display: block; margin-bottom: 6px; }
+    .excel-section input[type="file"] { font-size: 0.75rem; width: 100%; }
+    #excelStatus { font-size: 0.75rem; color: #666; margin-top: 6px; font-weight: 600; word-break: break-all; }
+    #excelStatus.success { color: #155724; background: #d4edda; padding: 4px; border-radius: 4px; }
+    #excelStatus.error { color: #721c24; background: #f8d7da; padding: 4px; border-radius: 4px; }
+
+    .scan-section {
+      background: #F8F9FA; border: 2px dashed var(--gold);
+      border-radius: 10px; padding: 12px; margin-bottom: 14px;
+    }
+    #reader {
+      width: 100%; border-radius: 8px; overflow: hidden;
+      background: #000; margin-bottom: 6px; display: none; min-height: 160px;
+      position: relative;
+    }
+    #reader video { width: 100% !important; height: auto !important; display: block; }
+    #reader::after {
+      content: ''; position: absolute; top: 50%; left: 50%; width: 85%; height: 44px; transform: translate(-50%, -50%);
+      border: 2px solid rgba(212, 175, 55, 0.8); border-radius: 3px;
+      pointer-events: none; z-index: 2; background: rgba(212, 175, 55, 0.05);
+      box-shadow: 0 0 20px rgba(212, 175, 55, 0.15);
+    }
+    .scan-controls { display: flex; gap: 8px; margin-bottom: 6px; }
+    .scan-btn {
+      flex: 1; padding: 9px; border: none; border-radius: 6px;
+      font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: opacity 0.2s;
+    }
+    .scan-btn.start { background: var(--gold); color: white; }
+    .scan-btn.stop { background: var(--gray); color: white; display: none; }
+    .scan-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .qr-status {
+      font-size: 0.75rem; font-weight: 600; min-height: 1.2em;
+      padding: 4px 6px; border-radius: 5px; text-align: center; word-break: break-all;
+    }
+    .qr-status.success { background: #D4EDDA; color: #155724; }
+    .qr-status.error { background: #F8D7DA; color: #721C24; }
+    .qr-status.info { background: #D1ECF1; color: #0C5460; }
+    .scanned-info {
+      background: #FFF8E1; border: 2px solid var(--gold); border-radius: 8px;
+      padding: 8px; margin-top: 6px; display: none; text-align: left;
+    }
+    .scanned-info.show { display: block; animation: fadeIn 0.3s ease; }
+    .info-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 0.82rem; }
+    .info-label { color: var(--light); font-weight: 600; flex-shrink: 0; margin-right: 6px; }
+    .info-value { color: var(--gold-dark); font-weight: 700; word-break: break-word; text-align: right; }
+    
+    .form-group { margin-bottom: 9px; }
+    label { display: block; margin-bottom: 2px; font-weight: 600; font-size: 0.82rem; }
+    input, select {
+      width: 100%; padding: 8px; border: 2px solid #E0E0E0; border-radius: 6px;
+      font-size: 0.88rem; background: #fff;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--gold); }
+    .price-group { display: none; }
+    .price-group.active { display: block; }    
+    
+    details { margin: 8px 0; border: 1px dashed #CCC; border-radius: 6px; padding: 7px; background: #FAFAFA; }
+    summary { cursor: pointer; font-weight: 600; color: var(--light); user-select: none; font-size: 0.78rem; }
+    details[open] summary { color: var(--gold-dark); }
+    .final-labour-preview { margin-top: 5px; font-size: 0.78rem; color: var(--light); text-align: right; }
+    .final-labour-preview span { color: var(--gold-dark); font-weight: 600; }
+    
+    .btn-group { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .reset-btn {
+      flex: 1; min-width: 90px; padding: 9px; background: var(--gray);
+      color: white; border: none; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    }
+    .calc-btn {
+      flex: 1; min-width: 100%; padding: 10px;
+      background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+      color: white; border: none; border-radius: 6px; font-size: 0.92rem; font-weight: 700;
+      cursor: pointer; margin-top: 2px;
+    }
+    .result-box {
+      margin-top: 12px; background: #FFF8E1; border: 3px solid var(--gold);
+      border-radius: 9px; padding: 14px; text-align: center; display: none;
+      box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+    }
+    .result-box.show { display: block; animation: fadeIn 0.3s ease; }
+    .res-title { font-size: 0.82rem; color: var(--light); margin-bottom: 5px; font-weight: 600; }
+    .res-total { font-size: 2.2rem; font-weight: 900; color: var(--gold-dark); text-shadow: 1px 1px 2px rgba(0,0,0,0.1); }
+    .tradein-box { margin-top: 10px; padding-top: 10px; border-top: 2px dashed var(--gold); }
+    .tradein-label { font-size: 0.8rem; color: var(--light); margin-bottom: 4px; font-weight: 600; }
+    .tradein-value { font-size: 1.4rem; font-weight: 800; color: var(--gold-dark); }
+    .note { font-size: 0.62rem; color: #888; text-align: center; margin-top: 8px; line-height: 1.3; white-space: pre-line; }
+    
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    #reader__dashboard { display: none !important; }
+    .cam-error { color: #dc3545; text-align: center; padding: 10px; font-size: 0.8rem; display: none; background: #f8d7da; border-radius: 6px; margin-top: 6px; }
+    .cam-error.show { display: block; }    
+    .retry-btn { background: var(--gold); color: white; border: none; border-radius: 4px; padding: 4px 12px; font-weight: 600; cursor: pointer; margin-left: 6px; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="title-stack">
+      <span class="title-en">Crown Jewels</span>
+      <span class="title-zh">金冠</span>
+    </div>
+    <select id="langSelect">
+      <option value="en">EN</option>
+      <option value="zh">中文</option>
+    </select>
+  </header>
+
+  <div class="excel-section">
+    <label id="lblExcelUpload">📁 Upload barcode.xlsx</label>
+    <input type="file" id="excelFile" accept=".xlsx,.xls">
+    <div id="excelStatus">No file loaded. Please upload your Excel sheet.</div>
+  </div>
+
+  <div class="scan-section">
+    <div id="reader"></div>
+    <div class="cam-error" id="camError">
+      <span id="camErrorMsg">⚠️ Error.</span>
+      <button class="retry-btn" id="retryLibBtn">Retry</button>
+    </div>
+
+    <div class="scan-controls">
+      <button class="scan-btn start" id="startScanBtn">📷 Start Camera</button>
+      <button class="scan-btn stop" id="stopScanBtn">⏹ Stop</button>
+    </div>
+
+    <div class="qr-status info" id="qrStatus">Ready to scan 1D Barcode</div>
+
+    <div class="scanned-info" id="scannedInfoBox">
+      <div class="info-row">
+        <span class="info-label" id="lblItemCode">Item Code:</span>
+        <span class="info-value" id="itemCodeDisplay">-</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label" id="lblDesc">Description:</span>
+        <span class="info-value" id="descDisplay">-</span>
+      </div>
+      <div class="info-row" style="margin-top:3px; border-top:1px dashed #ddd; padding-top:3px;">
+        <span class="info-label" id="lblBarcode">Scanned Data:</span>        
+        <span class="info-value" id="barcodeDisplay" style="font-size:0.7rem; font-weight:400; color:#555;">-</span>
+      </div>
+    </div>
+  </div>
+
+  <form id="goldForm" autocomplete="off">
+    <div class="form-group">
+      <label id="lblPurity">Gold Purity</label>
+      <select id="purity">
+        <option value="916" selected>916 (22K)</option>
+        <option value="999">999 (24K)</option>
+      </select>
+    </div>
+    <div class="form-group price-group active" id="price916Group">
+      <label id="lblPrice916">Daily 916 Gold Price (SGD/g)</label>
+      <input type="number" id="price916" step="0.01" placeholder="e.g. 95.50">
+    </div>
+    <div class="form-group price-group" id="price999Group">
+      <label id="lblPrice999">Daily 999 Gold Price (SGD/g)</label>
+      <input type="number" id="price999" step="0.01" placeholder="e.g. 120.50">
+    </div>
+
+    <div class="form-group">
+      <label id="lblWeight">Weight (grams)</label>
+      <input type="number" id="weight" step="0.01" placeholder="Auto-filled from Excel" required>
+    </div>
+
+    <details id="hiddenDetails">
+      <summary id="lblHiddenToggle">⚙️ Labour Cost & Discount</summary>
+      <div style="margin-top: 6px;">
+        <label id="lblHiddenInput">Labour Cost (SGD)</label>
+        <input type="number" id="hiddenCost" step="0.01" value="0" placeholder="Auto-filled from Excel">
+
+        <label id="lblDiscount" style="margin-top:6px;">Labour Discount (%)</label>
+        <input type="number" id="labourDiscount" step="1" min="0" max="100" value="0" placeholder="e.g. 10">
+
+        <div class="final-labour-preview">
+          <span id="finalLabourLabel">Final Labour:</span>
+          <span id="finalLabourDisplay">S$ 0.00</span>
+        </div>
+      </div>
+    </details>
+
+    <div class="btn-group">
+      <button type="button" class="reset-btn" id="resetScanBtn">🔄 New Item</button>
+      <button type="button" class="reset-btn" id="resetPriceBtn">Reset Price</button>
+      <button type="button" class="calc-btn" id="calcBtn">💰 Calculate Total</button>
+    </div>
+  </form>
+  
+  <div class="result-box" id="resultBox">
+    <div class="res-title" id="lblResult">Grand Selling Price</div>
+    <div class="res-total" id="grandTotal">S$ 0.00</div>
+    <div class="tradein-box" id="tradeinBox" style="display:none;">
+      <div class="tradein-label" id="lblTradeIn">Trade in Wt</div>
+      <div class="tradein-value" id="tradeinValue">0.00g</div>
+    </div>
+  </div>
+
+  <div class="note" id="gstNote">Includes 9% Singapore GST. Discounted labour cost applied.</div>
+  <div class="note" id="tradeinNote" style="display:none;">Trade-in value = Daily 916 price × 82% (18% discount).</div>
+</div>
+
+<script>
+// --------------------------------------------------------------
+//  i18n
+// --------------------------------------------------------------
+const i18n = {
+  en: {
+    excelUpload: "📁 Upload barcode.xlsx",
+    excelStatusEmpty: "No file loaded. Please upload your Excel sheet.",
+    qrReady: "Ready to scan 1D Barcode",
+    qrScanning: "⏳ Scanning...",
+    qrSuccess: "✅ Auto-filled from Excel!",
+    qrError: "⚠️ Item code not found in Excel",
+    qrStopped: "⏹ Camera stopped",
+    purity: "Gold Purity", price916: "Daily 916 Gold Price (SGD/g)", price999: "Daily 999 Gold Price (SGD/g)",
+    weight: "Weight (grams)", weightPlaceholder: "Auto-filled from Excel",
+    hiddenToggleNew: "⚙️ Labour Cost & Discount", hiddenInput: "Labour Cost (SGD)",
+    discountLabel: "Labour Discount (%)", discountPlaceholder: "e.g. 10", finalLabour: "Final Labour:",
+    startScan: "📷 Start Camera", stopScan: "⏹ Stop", resetScan: "🔄 New Item", resetPrice: "Reset Price",
+    calcBtn: "💰 Calculate Total", result: "Grand Selling Price",
+    gstNote: "Includes 9% Singapore GST. Discounted labour cost applied.",
+    tradeinLabel: "Trade in Wt", tradeinNote: "Trade-in value = Daily 916 price × 82% (18% discount).",
+    itemCodeLabel: "Item Code:", descLabel: "Description:", barcodeLabel: "Scanned Data:"
+  },
+  zh: {
+    excelUpload: "📁 上传 barcode.xlsx",
+    excelStatusEmpty: "未加载文件。请上传您的 Excel 表格。",
+    qrReady: "准备扫描一维条码",
+    qrScanning: "⏳ 扫描中...",
+    qrSuccess: "✅ 已从 Excel 自动填入！",
+    qrError: "⚠️ Excel 中未找到该商品编号",
+    qrStopped: "⏹ 已停止",
+    purity: "黄金纯度", price916: "每日 916 金价 (新元/克)", price999: "每日 999 金价 (新元/克)",
+    weight: "重量 (克)", weightPlaceholder: "从 Excel 自动填充",
+    hiddenToggleNew: "⚙️ 工费与折扣", hiddenInput: "工费 (新元)",
+    discountLabel: "工费折扣 (%)", discountPlaceholder: "例如: 10", finalLabour: "折后工费：",
+    startScan: "📷 启动摄像头", stopScan: "⏹ 停止", resetScan: "🔄 扫描新品", resetPrice: "重置金价",
+    calcBtn: "💰 计算总价", result: "最终售价",
+    gstNote: "已含 9% 新加坡消费税。已应用折后工费。",
+    tradeinLabel: "回收重量", tradeinNote: "回收价 = 916 金价 × 82% (18% 折扣)。",
+    itemCodeLabel: "商品编号：", descLabel: "商品描述：", barcodeLabel: "扫描数据："
+  }
+};
+
+// --------------------------------------------------------------
+//  State & Excel Data
+// --------------------------------------------------------------
+let cur = 'en';
+let isScanning = false;
+let barcodeReader = null;
+let lastDecode = '';
+let libraryReady = false;
+let excelData = {}; 
+
+const $ = id => document.getElementById(id);
+const t = k => i18n[cur][k] || k;
+
+// --------------------------------------------------------------
+//  Excel Handling (SheetJS)
+// --------------------------------------------------------------
+$('excelFile').addEventListener('change', function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      
+      const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
+      
+      excelData = {};
+      let count = 0;
+
+      let headers = jsonData[0].map(h => String(h).toLowerCase().trim());
+      let startRow = 1;
+
+      const isHeader = headers.some(h => 
+          h.includes('item') || h.includes('code') || h.includes('barcode') || 
+          h.includes('wt') || h.includes('weight') || h.includes('labour') || 
+          h.includes('编号') || h.includes('条码') || h.includes('重量') || h.includes('工费')
+      );
+
+      if (!isHeader) {
+        startRow = 0;
+        headers = ['item code', 'weight', 'labour', 'description'];
+      }
+
+      const codeIdx = headers.findIndex(h => h.includes('item') || h.includes('code') || h.includes('barcode') || h.includes('编号') || h.includes('条码'));
+      const wtIdx = headers.findIndex(h => h.includes('wt') || h.includes('weight') || h.includes('gram') || h.includes('重量'));
+      const labIdx = headers.findIndex(h => h.includes('lab') || h.includes('work') || h.includes('fee') || h.includes('工费'));
+      const descIdx = headers.findIndex(h => h.includes('desc') || h.includes('name') || h.includes('描述'));
+
+      for (let i = startRow; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row || row.length === 0) continue;
+
+        const code = String(row[codeIdx !== -1 ? codeIdx : 0] || '').trim();
+        if (!code) continue;
+
+        excelData[code] = {
+          weight: parseFloat(row[wtIdx !== -1 ? wtIdx : 1]) || 0,
+          labour: parseFloat(row[labIdx !== -1 ? labIdx : 2]) || 0,
+          description: String(row[descIdx !== -1 ? descIdx : 3] || '').trim()
+        };
+        count++;
+      }
+
+      const statusEl = $('excelStatus');
+      const sampleKeys = Object.keys(excelData).slice(0, 3).join(', ');
+      statusEl.textContent = `✅ Loaded ${count} items. Sample codes: ${sampleKeys || 'None'}`;
+      statusEl.className = 'success';
+      
+      try { localStorage.setItem('crownJewelsExcel', JSON.stringify(excelData)); } catch(e) {}
+
+    } catch (err) {
+      console.error(err);
+      const statusEl = $('excelStatus');
+      statusEl.textContent = '❌ Error reading Excel file.';
+      statusEl.className = 'error';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+try {
+  const saved = localStorage.getItem('crownJewelsExcel');
+  if (saved) {
+    excelData = JSON.parse(saved);
+    const count = Object.keys(excelData).length;
+    if (count > 0) {
+      const statusEl = $('excelStatus');
+      const sampleKeys = Object.keys(excelData).slice(0, 3).join(', ');
+      statusEl.textContent = `✅ Loaded ${count} items from memory. Sample codes: ${sampleKeys}`;
+      statusEl.className = 'success';
+    }
+  }
+} catch(e) {}
+
+// --------------------------------------------------------------
+//  UI helpers
+// --------------------------------------------------------------
+function updateStatus(msg, type = 'info') {
+  const el = $('qrStatus');  el.textContent = msg;
+  el.className = `qr-status ${type}`;
+}
+
+function showCameraError(message) {
+  $('camErrorMsg').textContent = message;
+  $('camError').classList.add('show');
+}
+
+function hideCameraError() { $('camError').classList.remove('show'); }
+
+function updateFinalLabour() {
+  const h = parseFloat($('hiddenCost').value) || 0;
+  const d = Math.max(0, Math.min(100, parseFloat($('labourDiscount').value) || 0));
+  const final = h * (1 - d / 100);
+  $('finalLabourDisplay').textContent = new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' }).format(final);
+}
+
+function updatePriceField() {
+  const purity = $('purity').value;
+  $('price916Group').classList.toggle('active', purity === '916');
+  $('price999Group').classList.toggle('active', purity === '999');
+}
+
+function getCurrentPrice() {
+  const p = $('purity').value;
+  return p === '916' ? parseFloat($('price916').value) : parseFloat($('price999').value);
+}
+
+// --------------------------------------------------------------
+//  Barcode decode handler (IMPROVED MATCHING & DEBUGGING)
+// --------------------------------------------------------------
+function onBarcodeDecoded(decodedText, format) {
+  if (!isScanning) return;
+  if (decodedText === lastDecode) return;
+  lastDecode = decodedText;
+
+  const itemCode = decodedText.trim();
+  $('barcodeDisplay').textContent = itemCode + (format ? ` [${format}]` : '');
+
+  if (Object.keys(excelData).length === 0) {
+    updateStatus('⚠️ ' + (cur === 'en' ? 'Please upload barcode.xlsx first!' : '请先上传 barcode.xlsx！'), 'error');
+    stopScanner();
+    return;
+  }
+
+  // 1. Exact Match
+  let item = excelData[itemCode];
+  let matchedKey = itemCode;
+
+  // 2. Fuzzy Match (Fallback for leading zeros or prefixes)
+  if (!item) {
+    for (const key in excelData) {
+      if (key.includes(itemCode) || itemCode.includes(key)) {
+        item = excelData[key];
+        matchedKey = key;
+        console.log(`Fuzzy match: Scanned "${itemCode}" matched Excel key "${key}"`);
+        break;
+      }
+    }
+  }
+
+  if (item) {
+    $('itemCodeDisplay').textContent = matchedKey;
+    $('descDisplay').textContent = item.description || '-';
+
+    if (item.weight > 0) $('weight').value = item.weight;
+    if (item.labour > 0) {
+      $('hiddenCost').value = item.labour;
+      updateFinalLabour();
+    }
+
+    $('scannedInfoBox').classList.add('show');
+    updateStatus(t('qrSuccess'), 'success');
+    stopScanner();
+
+    const price = getCurrentPrice();
+    if (item.weight > 0 && price > 0) {
+      setTimeout(calc, 400);
+    }
+  } else {
+    const sampleKeys = Object.keys(excelData).slice(0, 3).join(', ');
+    const errorMsg = `❌ Not found! Scanned: "${itemCode}". Excel has: "${sampleKeys}..."`;
+    updateStatus(errorMsg, 'error');
+    console.error("Match failed. Scanned:", itemCode, "Excel Keys:", Object.keys(excelData));
+    
+    setTimeout(() => { lastDecode = ''; }, 1500); 
+  }
+}
+
+// --------------------------------------------------------------
+//  ZXing Loader
+// --------------------------------------------------------------
+const CDN_URLS = [
+  'https://unpkg.com/@zxing/library@0.21.3/umd/index.js',
+  'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.js'
+];
+
+function loadScript(src, timeout = 10000) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = src; script.async = true;
+    const timer = setTimeout(() => reject(new Error(`Timeout`)), timeout);
+    script.onload = () => { clearTimeout(timer); resolve(); };
+    script.onerror = () => { clearTimeout(timer); reject(new Error(`Failed`)); };
+    document.head.appendChild(script);
+  });
+}
+
+async function loadZXing() {
+  if (libraryReady) return true;
+  for (let url of CDN_URLS) {
+    try {
+      await loadScript(url);
+      if (typeof ZXing !== 'undefined') { libraryReady = true; hideCameraError(); return true; }
+    } catch (e) { console.warn(e); }
+  }
+  showCameraError('⚠️ Barcode library failed to load.');
+  return false;
+}
+
+// --------------------------------------------------------------
+//  Scanner start (FIXED: Uses MultiFormat with 1D Hints)
+// --------------------------------------------------------------
+async function startScanner() {
+  if (isScanning) return;
+  if (!libraryReady) {
+    updateStatus('⏳ Loading library...', 'info');
+    if (!(await loadZXing())) return;
+  }
+
+  updateStatus(t('qrScanning'), 'info');
+  $('startScanBtn').disabled = true;
+  hideCameraError();
+
+  try {
+    const readerEl = $('reader');
+    readerEl.innerHTML = '';
+    readerEl.style.display = 'block';
+
+    const videoEl = document.createElement('video');
+    videoEl.setAttribute('playsinline', 'true');
+    videoEl.setAttribute('autoplay', 'true');
+    videoEl.style.width = '100%'; videoEl.style.display = 'block';
+    readerEl.appendChild(videoEl);
+
+    // FIXED: Use MultiFormatReader but restrict hints to 1D barcodes only (Ignores QR)
+    barcodeReader = new ZXing.BrowserMultiFormatReader();
+    barcodeReader.timeBetweenDecodingAttempts = 300;
+
+    try {
+        const hints = new Map();
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+            ZXing.BarcodeFormat.CODE_128,
+            ZXing.BarcodeFormat.CODE_39,
+            ZXing.BarcodeFormat.EAN_13,
+            ZXing.BarcodeFormat.EAN_8,
+            ZXing.BarcodeFormat.UPC_A,
+            ZXing.BarcodeFormat.UPC_E,
+            ZXing.BarcodeFormat.ITF,
+            ZXing.BarcodeFormat.CODABAR
+        ]);
+        barcodeReader.hints = hints;
+    } catch(e) { console.warn("Could not set hints", e); }
+
+    const devices = await barcodeReader.listVideoInputDevices();
+    if (devices.length === 0) throw new Error('No camera');
+    
+    let deviceId = devices[0].deviceId;
+    for (const d of devices) {
+      if (d.label && (d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('environment'))) {
+        deviceId = d.deviceId; break;
+      }
+    }
+
+    await barcodeReader.decodeFromVideoDevice(deviceId, videoEl, (result, error) => {
+      if (result && isScanning) {
+        const text = result.getText ? result.getText() : result.toString();
+        const format = result.getBarcodeFormat ? result.getBarcodeFormat().toString() : '';
+        onBarcodeDecoded(text, format);
+      }
+    });
+
+    isScanning = true;
+    $('startScanBtn').style.display = 'none';
+    $('stopScanBtn').style.display = 'block';
+    $('startScanBtn').disabled = false;
+
+  } catch (err) {
+    console.error(err);
+    $('reader').style.display = 'none';
+    $('startScanBtn').disabled = false;
+    showCameraError('⛔ ' + (err.message || 'Camera failed.'));
+  }
+}
+
+async function stopScanner() {
+  if (barcodeReader) { try { await barcodeReader.reset(); } catch (e) {} barcodeReader = null; }
+  isScanning = false; lastDecode = '';
+  $('reader').innerHTML = ''; $('reader').style.display = 'none';
+  $('startScanBtn').style.display = 'block'; $('stopScanBtn').style.display = 'none';
+  updateStatus(t('qrStopped'), 'info');
+}
+
+// --------------------------------------------------------------
+//  Calculation & Reset
+// --------------------------------------------------------------
+function calc() {
+  const w = parseFloat($('weight').value) || 0;
+  const p = getCurrentPrice() || 0;
+  const h = parseFloat($('hiddenCost').value) || 0;
+  const d = Math.max(0, Math.min(100, parseFloat($('labourDiscount').value) || 0));
+
+  if (w <= 0 || p <= 0) { alert(cur === 'en' ? 'Enter valid weight & daily price.' : '请输入有效重量和金价。'); return; }
+
+  const finalLabour = h * (1 - d / 100);
+  const grandTotal = ((w * p) + finalLabour) * 1.09;
+  const tradeInRate = 0.82;
+  const tradeInBasePrice = $('price916').value ? parseFloat($('price916').value) : 0;
+  const tradeInWt = tradeInBasePrice > 0 ? grandTotal / (tradeInBasePrice * tradeInRate) : 0;
+
+  $('grandTotal').textContent = new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' }).format(grandTotal);
+  $('tradeinValue').textContent = tradeInWt.toFixed(2) + 'g';
+  $('tradeinBox').style.display = 'block'; $('tradeinNote').style.display = 'block';
+  $('resultBox').classList.add('show');
+  $('resultBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function resetScanFields() {
+  $('weight').value = ''; $('hiddenCost').value = '0'; $('labourDiscount').value = '0';
+  $('resultBox').classList.remove('show'); $('tradeinBox').style.display = 'none'; $('tradeinNote').style.display = 'none';
+  $('scannedInfoBox').classList.remove('show');
+  $('itemCodeDisplay').textContent = '-'; $('descDisplay').textContent = '-'; $('barcodeDisplay').textContent = '-';
+  lastDecode = ''; updateFinalLabour(); updateStatus(t('qrReady'), 'info'); stopScanner();
+}
+
+function resetPriceField() {
+  const p = $('purity').value;
+  if (p === '916') $('price916').value = ''; else $('price999').value = '';
+  $('resultBox').classList.remove('show'); $('tradeinBox').style.display = 'none'; $('tradeinNote').style.display = 'none';
+}
+
+// --------------------------------------------------------------
+//  Language & Events
+// --------------------------------------------------------------
+function updateLang() {
+  cur = $('langSelect').value;
+  $('lblExcelUpload').textContent = t('excelUpload');
+  if(Object.keys(excelData).length === 0) $('excelStatus').textContent = t('excelStatusEmpty');
+  
+  $('lblPurity').textContent = t('purity'); $('lblPrice916').textContent = t('price916'); $('lblPrice999').textContent = t('price999');
+  $('lblWeight').textContent = t('weight'); $('weight').placeholder = t('weightPlaceholder');
+  $('lblHiddenToggle').textContent = t('hiddenToggleNew'); $('lblHiddenInput').textContent = t('hiddenInput');
+  $('lblDiscount').textContent = t('discountLabel'); $('labourDiscount').placeholder = t('discountPlaceholder');
+  $('finalLabourLabel').textContent = t('finalLabour');
+  $('startScanBtn').textContent = t('startScan'); $('stopScanBtn').textContent = t('stopScan');
+  $('resetScanBtn').textContent = t('resetScan'); $('resetPriceBtn').textContent = t('resetPrice'); $('calcBtn').textContent = t('calcBtn');
+  $('lblResult').textContent = t('result'); $('gstNote').textContent = t('gstNote');
+  $('lblTradeIn').textContent = t('tradeinLabel'); $('tradeinNote').textContent = t('tradeinNote');
+  $('lblItemCode').textContent = t('itemCodeLabel'); $('lblDesc').textContent = t('descLabel'); $('lblBarcode').textContent = t('barcodeLabel');
+  
+  document.documentElement.lang = cur === 'zh' ? 'zh-CN' : 'en';
+  updateFinalLabour();
+}
+
+$('langSelect').addEventListener('change', updateLang);
+$('calcBtn').addEventListener('click', calc);
+$('resetScanBtn').addEventListener('click', resetScanFields);
+$('resetPriceBtn').addEventListener('click', resetPriceField);
+$('startScanBtn').addEventListener('click', startScanner);
+$('stopScanBtn').addEventListener('click', stopScanner);
+$('purity').addEventListener('change', updatePriceField);
+$('hiddenCost').addEventListener('input', updateFinalLabour);
+$('labourDiscount').addEventListener('input', updateFinalLabour);
+document.getElementById('retryLibBtn').addEventListener('click', loadZXing);
+document.addEventListener('visibilitychange', () => { if (document.hidden && isScanning) stopScanner(); });
+
+updateLang(); updatePriceField(); updateFinalLabour(); updateStatus(t('qrReady'), 'info');
+loadZXing();
+</script>
+</body>
+</html>
